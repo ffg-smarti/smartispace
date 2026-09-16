@@ -1,0 +1,64 @@
+# ============================================================
+# OpenAPI Schema Export
+# ============================================================
+# Wiederverwendbarer (workflow_call) UND standalone nutzbarer Workflow.
+# Migriert die Test-DB und exportiert das OpenAPI-Schema der Ninja-API
+# nach packages/smarti-api/openapi.json (Single Source of Truth).
+#
+# Standalone-Trigger: workflow_dispatch (manuell neu erzeugen + committen).
+# Kein push-Trigger — auf backend-Änderungen wird es von backend-ci.yml
+# via `uses:` aufgerufen (vermeidet Doppelläufe).
+# ============================================================
+
+name: OpenAPI Schema Export
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smarti_test
+          POSTGRES_USER: smarti
+          POSTGRES_PASSWORD: smarti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smarti"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Export OpenAPI schema
+        run: |
+          uv run python src/dweb/manage.py migrate \
+            --settings=dsmarti.settings --run-syncdb
+          uv run python src/dweb/manage.py export_openapi_schema \
+            --output ../packages/smarti-api/openapi.json
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          SECRET_KEY: schema-export-secret
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+
+      - name: Upload schema artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # Kanonischer Artefakt-Name (Single Source of Truth).
+          name: openapi-schema
+          path: packages/smarti-api/openapi.json
+          retention-days: 90

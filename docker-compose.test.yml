@@ -1,0 +1,69 @@
+# docker-compose.test.yml
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smarti_test
+      POSTGRES_USER: smarti
+      POSTGRES_PASSWORD: smarti
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smarti -d smarti_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: builder
+    command: >
+      uv run python -m pytest tests/ -v --tb=short
+    volumes:
+      - ./backend/src:/app/backend/src
+    environment:
+      DEBUG: "True"
+      DATABASE_URL: postgresql://smarti:smarti@db:5432/smarti_test
+      SECRET_KEY: test-only-not-for-production
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      CORS_ALLOWED_ORIGINS: "http://localhost:8080,http://localhost:8081"
+      DJANGO_SETTINGS_MODULE: dweb.dsmarti.settings
+      PYTHONPATH: /app/backend/src
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: smarti
+      AWS_SECRET_ACCESS_KEY: smarti123
+      AWS_STORAGE_BUCKET_NAME: smarti-h5p
+      AWS_S3_REGION_NAME: us-east-1
+      AWS_QUERYSTRING_AUTH: "True"
+      AWS_QUERYSTRING_EXPIRE: "3600"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: smarti
+      MINIO_ROOT_PASSWORD: smarti123
+    volumes:
+      - minio_test_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_test_data:
+  minio_test_data:

@@ -1,0 +1,347 @@
+[project]
+name = "SMARTi-LMS"
+version = "0.2.0"
+description = "SMARTi-LMS – Learning Management System & Orchestrator"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Waldemar Kloos", email = "w.kloos@gmx.de"},
+]
+keywords = ["lms", "education", "django", "learning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Django",
+    "Topic :: Education :: Computer Aided Instruction (CAI)",
+]
+
+dependencies = [
+    "django>=5.1,<6.0",
+    "django-flatpickr>=2.0.3,<3.0.0",
+    "django-import-export>=4.3.8,<5.0.0",
+    "django-polymorphic>=4.1.0,<5.0.0",
+    "django-widget-tweaks>=1.5.0,<2.0.0",
+    "django-formtools>=2.5.1",
+    "django-enumfield>=3.1",
+    "django-ninja>=1.6",
+    "django-cors-headers>=4.9.0",
+    "django-debug-toolbar>=4.0.0,<5.0.0",
+    "django-extensions>=4.1.0,<5.0.0",
+    "werkzeug>=3.1.3,<4.0.0",
+    "pydantic>=2.12.3",
+    "pydantic-core>=2.41.4",
+    "pydantic-settings>=2.11.0",
+    "dependency-injector>=4.0.0,<5.0.0",
+    "jsonschema>=4.24.0,<5.0.0",
+    "pillow>=11.2.1,<12.0.0",
+    "typer>=0.20.0",
+    "psutil>=6",
+    "pandas>=2.3.3",
+    "xlsxwriter>=1.4.5",
+    "mypy>=1.18.2",
+    "ruff>=0.11.13",
+    "plantuml>=0.3.0",
+    "django-stubs[compatible-mypy]>=5.2.7",
+    "mcp-django>=0.13.0",
+    "django-jsoneditor>=0.2.4",
+    "django-storages>=1.14.0",
+    "boto3>=1.35.0",
+    "gunicorn>=22.0.0",
+    "whitenoise>=6.7.0",
+    "sentry-sdk>=2.14.0",
+    "celery>=5.4.0,<6.0.0",
+    "redis>=5.2.0,<6.0.0",
+    "psycopg2-binary>=2.9.10",
+    "dj-database-url>=0.3.0",
+    "celery-types>=0.26.0",
+    "bcrypt>=5.0.0",
+]
+
+[dependency-groups]
+requirements = [
+    "strictdoc>=0.14.0",
+    "plantuml>=0.3.0",
+]
+
+dev = [
+    "pyright>=1.1.400,<2.0.0",
+    "ty>=0.0.59",           # lokal erssatz für mypy
+    "mypy>=1.17.1,<2.0.0",
+    "django-stubs[compatible-mypy]>=5.2.2,<6.0.0",
+    "pytest>=8.3.5,<9.0.0",
+    "pytest-django>=4.11.1,<5.0.0",
+    "pytest-html>=4.1.1,<5.0.0",
+    "pytest-cov>=6.2.1,<7.0.0",
+    "pytest-xdist>=3.8.0,<4.0.0",
+    "pytest-watch>=4.2.0,<5.0.0",
+    "pytest-mock>=3.15.1",
+    "freezegun==1.5.5",
+    "pytest-playwright>=0.7.2",
+    "ruff>=0.11.8,<0.12.0",
+    "black>=25.1.0,<26.0.0",
+    "pylint>=3.0.0,<4.0.0",
+    "pydeps>=1.12.0,<2.0.0",
+    "typing-extensions>=4.15.0",
+    "typing-inspection>=0.4.2",
+    "mcp[cli]>=1.0.0",
+    "schemathesis>=4.10.2",
+    "django-stubs-ext>=6.0.6",
+    "pyrefly>=1.1.1",
+]
+
+docs = [
+    "mkdocs>=1.6.1,<2.0.0",
+    "mkdocs-material>=9.6.12,<10.0.0",
+    "mkdocstrings-python>=0.29.1",
+]
+
+deploy = []
+
+[project.scripts]
+smarti = "cli:app"
+
+[project.urls]
+Homepage = "https://github.com/ffg-smarti/smartispace"
+Documentation = "https://github.com/ffg-smarti/smartispace"
+Repository = "https://github.com/ffg-smarti/smartispace"
+Issues = "https://github.com/ffg-smarti/smartispace/issues"
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ty für lokalen Tests (ist noch Beta-Version)
+[tool.ty]
+
+[tool.ty.src]
+include = ["src", "tests"]
+exclude = [
+    "**/migrations/**",
+    "**/tests/**",
+    "**/__pycache__/**",
+    "**/.venv/**",
+    "**/venv/**",
+    ]
+
+
+# Pyrefly für CI/CD
+[tool.pyrefly]
+python_version = "3.12"
+search_path = ["backend/src"]  # Dein Haupt-App-Pfad
+disable_search_path_heuristics = true
+# Excludes (wie bei ty)
+project-excludes = [
+    "cli.py",
+    "setup.py",
+    "tools",
+    "backend/src/smarti/profiles", # TEMPORÄR
+    "backend/tests/",
+    "**/migrations/**",
+    "**/tests/**",
+    "**/__pycache__/**",
+]
+
+# Strengere Prüfung für CI
+strict = false
+warn_unused_ignores = true
+warn_return_any = true
+
+# Django-Unterstützung aktivieren (das ist der wichtige Unterschied zu ty!)
+[tool.pyrefly.django]
+enabled = true
+settings_module = "dweb.dsmarti.settings"  # Dein Django Settings-Modul
+
+# Zusätzlich: Den Root-Pfad für Imports angeben
+[tool.pyrefly.environment]
+# PYTHONPATH für die Import-Auflösung
+sys_path = [
+    "backend/src",  # Dein Haupt-Quellcode
+]
+
+# Zusätzlich: Der Import-Root
+[tool.pyrefly.imports]
+# Wo liegt der Root für absolute Imports?
+root = "backend/src"
+
+# Overrides für problematische Pakete (wie bei mypy/ty)
+[tool.pyrefly.overrides]
+"celery.*" = { ignore_missing_imports = true }
+"django_debug_toolbar.*" = { ignore_missing_imports = true }
+"django_extensions.*" = { ignore_missing_imports = true }
+"django_flatpickr.*" = { ignore_missing_imports = true }
+"django_import_export.*" = { ignore_missing_imports = true }
+"django_polymorphic.*" = { ignore_missing_imports = true }
+"django_widget_tweaks.*" = { ignore_missing_imports = true }
+"import_export.*" = { ignore_missing_imports = true }
+"dateutil.*" = { ignore_missing_imports = true }
+"bcrypt" = { ignore_missing_imports = true }
+
+
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+lint.select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+]
+lint.ignore = [
+    "E501",
+]
+lint.exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "migrations",
+    "tests",
+    "scripts",
+    "docs",
+    "htmlcov",
+    "node_modules",
+    "apps",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*/migrations/*" = ["F401"]
+"*/dsmarti/settings*.py" = ["E402", "F403", "F405"]
+
+[tool.black]
+target-version = ["py312"]
+line-length = 88
+skip-string-normalization = true
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  | migrations
+  | scripts
+  | .venv
+  | node_modules
+)/
+'''
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+plugins = ["mypy_django_plugin.main"]
+mypy_path = ["src"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "django.*",
+    "django_debug_toolbar.*",
+    "django_extensions.*",
+    "django_flatpickr.*",
+    "django_import_export.*",
+    "django_polymorphic.*",
+    "django_widget_tweaks.*",
+    "django.http.request",  # Spezifisch diese Datei
+    "mypy_django_plugin.*",
+    "django.http.*",
+    "celery.*",
+    "import_export.*",
+    "import_export.admin",
+    "dateutil.*",
+    "bcrypt",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "*/urls.py"
+disable_error_code = "var-annotated"
+
+[tool.django-stubs]
+django_settings_module = "dweb.dsmarti.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "dweb.dsmarti.settings"
+python_files = ["test_*.py", "*_test.py"]
+pythonpath = ["backend/src", "backend/src/dweb", "backend/src/smarti", "backend"]
+testpaths = ["backend/tests"]
+
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=smarti",
+    "--cov-report=html:build/test/htmlcov",
+    "--html=build/test/pytest-report.html",
+    "--self-contained-html",
+    "-p", "no:warnings",
+    "--base-url=http://localhost:8000",
+    "--browser=chromium",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "playwright: marks tests that require playwright browser",
+    "schemathesis: marks contract tests via schemathesis (deselect with '-m \"not schemathesis\"')",
+    "requirement: REQ-ID-Rückverfolgbarkeit — Format: @pytest.mark.requirement(\"REQ-XXX-001\")",
+
+]
+
+[tool.coverage.run]
+source = ["smarti"]
+data_file = "build/test/.coverage"
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedErrorError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.pylint]
+max-line-length = 88
+disable = [
+    "C0301",
+    "C0415",
+    "E1101",
+    "E1102",
+]
+
+[tool.pylint.master]
+ignore = [
+    "migrations",
+    "__pycache__",
+    ".venv",
+]
+
+[tool.pylint.format]
+good-names = "i,j,k,x,y,z,ex,Run,_,id,pk"
+
+[tool.pyright]
+extraPaths = ["backend/src", "backend"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", "**/migrations"]

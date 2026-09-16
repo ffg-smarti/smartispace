@@ -1,0 +1,152 @@
+# ============================================================
+# Deploy — Auslieferung der Container (nur Build + ghcr)
+# ============================================================
+# Trigger: push auf release (manueller Merge des Tags) | workflow_dispatch (Tag-Input)
+#
+# Annahme: Der Release-Branch ist RFR-freigegeben (Gates liefen auf main in
+# delivery.yml). Deploy macht daher NUR das Nötigste: Images bauen + zu ghcr pushen.
+# Kein RFI/RFR-Gate, kein Tagging.
+#
+# COOLIFY (Phase 2): Das eigentliche Deployment wird aktuell MANUELL in Coolify
+# gemacht. Die Coolify-Webhook-Schritte unten sind auskommentiert und werden in
+# Phase 2 automatisiert.
+#
+# env → Zentrale Konfiguration (Domains, Images)
+# jobs:
+#   validate        → Tag auflösen + Secrets prüfen
+#   build           → Images (backend, parent, kids) bauen + ghcr pushen
+#   schema-export   → OpenAPI-Schema (für Frontend-Builds)
+#
+# Neuen Dienst hinzufügen:
+#   - Job definieren (oder Matrix-Eintrag)
+#   - env-Variablen ergänzen falls nötig
+#   - Keine Änderungen an bestehenden Jobs
+# 
+# Domain wechseln:
+#   - API_URL und COOLIFY_URL im env-Block ändern
+#   - Alle Jobs ziehen mit
+# ============================================================
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release-Tag (z. B. v0.1.0) vom Release-Branch'
+        required: true
+        type: string
+  push:
+    branches: [release]
+
+env:
+  # Docker Registry
+  REGISTRY: ghcr.io
+  # Image-Namen (Prefix)
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+  # Domains & URLs
+  #   Phase 1: api.fit-fuer-gymnasium.de (Hetzner VPS + Coolify)
+  #   Phase 2: api.smarti.de (Vercel + Railway)
+  API_URL: https://api.fit-fuer-gymnasium.de
+  COOLIFY_URL: https://ffg-coolify-admin.fit-fuer-gymnasium.de
+
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # VALIDATE — Tag auflösen + Secrets prüfen
+  # ══════════════════════════════════════════════════════════
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve deploy tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            VERSION=$(grep '^version = ' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+            TAG="v$VERSION"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Deploy-Tag: $TAG"
+
+      - name: Check required secrets
+        env:
+          PROD_SECRET_KEY: ${{ secrets.PROD_SECRET_KEY }}
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          PROD_R2_ACCESS_KEY_ID: ${{ secrets.PROD_R2_ACCESS_KEY_ID }}
+          PROD_R2_SECRET_ACCESS_KEY: ${{ secrets.PROD_R2_SECRET_ACCESS_KEY }}
+          PROD_EMAIL_HOST_PASSWORD: ${{ secrets.PROD_EMAIL_HOST_PASSWORD }}
+        run: |
+          MISSING=""
+          OPTIONAL_MISSING=""
+          for var in PROD_SECRET_KEY PROD_DATABASE_URL PROD_EMAIL_HOST_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              MISSING="$MISSING $var"
+            fi
+          done
+          # R2-Uploads sind optional — nur Warnung, kein Abbruch
+          for var in PROD_R2_ACCESS_KEY_ID PROD_R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!var}" ]; then
+              OPTIONAL_MISSING="$OPTIONAL_MISSING $var"
+            fi
+          done
+          if [ -n "$OPTIONAL_MISSING" ]; then
+            echo "::warning::Optionale Secrets fehlen (R2 Uploads deaktiviert):$OPTIONAL_MISSING"
+          fi
+          if [ -n "$MISSING" ]; then
+            echo "::error::Folgende Secrets fehlen in GitHub:$MISSING"
+            echo "::error::Bitte anlegen in: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "✅ Alle erforderlichen Secrets vorhanden"
+
+  # ══════════════════════════════════════════════════════════
+  # BUILD — Images bauen + zu ghcr pushen
+  # ══════════════════════════════════════════════════════════
+  build:
+    needs: validate
+    uses: ./.github/workflows/build-images.yml
+    with:
+      tag: ${{ needs.validate.outputs.tag }}
+    secrets: inherit
+
+  # ══════════════════════════════════════════════════════════
+  # SCHEMA-EXPORT — für Frontend-Builds (openapi.json)
+  # ══════════════════════════════════════════════════════════
+  schema-export:
+    needs: validate
+    uses: ./.github/workflows/schema-export.yml
+
+  # ══════════════════════════════════════════════════════════
+  # PHASE 2 — COOLIFY DEPLOY (manuell, bis Phase 2)
+  # ══════════════════════════════════════════════════════════
+  # Das eigentliche Deployment erfolgt aktuell MANUELL in Coolify.
+  # In Phase 2 werden die folgenden Webhook-Jobs reaktiviert:
+  #
+  # deploy-backend:
+  #   needs: [build]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy Backend (Coolify Webhook)
+  #       run: |
+  #         curl -X GET \
+  #           "${{ env.COOLIFY_URL }}/api/v1/deploy?uuid=${{ secrets.COOLIFY_SERVICE_UUID }}&force=false" \
+  #           -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_HOOK_TOKEN }}"
+  #
+  # deploy-frontends:
+  #   needs: [build]
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       service:
+  #         - name: Eltern-Portal
+  #           secret: COOLIFY_UUID_PARENT
+  #         - name: Kinder-Lern-App
+  #           secret: COOLIFY_UUID_KIDS
+  #   steps:
+  #     - name: Deploy ${{ matrix.service.name }} (Coolify)
+  #       run: |
+  #         curl -X GET \
+  #           "${{ env.COOLIFY_URL }}/api/v1/deploy?uuid=${{ secrets[matrix.service.secret] }}&force=false" \
+  #           -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_HOOK_TOKEN }}"

@@ -1,0 +1,268 @@
+# ============================================================
+# RFR — Release Readiness (reusable)
+# ============================================================
+# Reusable Workflow (workflow_call) für die System-Ebene-Checks.
+# Wird von delivery.yml als RFR-Gate aufgerufen.
+#
+# Was RFR prüft (und RFI nicht):
+#   - Integrationstests (pytest -m slow)
+#   - Migrations-Konsistenz
+#   - Security Audit (pip + npm)
+#   - Spec-Validierung
+#   - Version > letztes Release
+#
+# Package-Ebene (typecheck, lint, unit tests) wird von den RFI-Workflows
+# (rfi.yml) abgedeckt; API-Contract-Tests (Schemathesis) in schema-contract.yml
+# — keine Redundanz.
+#
+# Kein Tag, kein Deploy — nur der Gate-Report.
+# ============================================================
+
+name: RFR [Release Readiness]
+
+on:
+  workflow_call:
+
+env:
+  # Domains (Phase 1)
+  API_URL: https://api.fit-fuer-gymnasium.de
+
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # BACKEND INTEGRATION
+  # ══════════════════════════════════════════════════════════
+  # Integrationstests + API Contract + Migration-Check
+  backend-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smarti_test
+          POSTGRES_USER: smarti
+          POSTGRES_PASSWORD: smarti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smarti"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      # RFI-Checks (ruff, pyrefly, unit tests) und API-Contract-Tests (Schemathesis)
+      # sind bewusst NICHT hier — sie laufen in rfi.yml bzw. schema-contract.yml
+      # (RFI-/Package-Ebene). doc8 §5.2: keine Redundanz in RFR.
+
+      - name: Integration tests
+        run: uv run smarti test integration-test
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+
+      - name: Check migration consistency
+        run: uv run python src/dweb/manage.py makemigrations --check --dry-run
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          SECRET_KEY: rfr-check-secret
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+
+  # ══════════════════════════════════════════════════════════
+  # SECURITY AUDIT
+  # ══════════════════════════════════════════════════════════
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Python dependency audit
+        run: uv run pip audit || echo "::warning::pip audit found issues"
+        continue-on-error: true
+
+      - name: Node dependency audit
+        run: npm audit --audit-level=high || echo "::warning::npm audit found issues"
+        continue-on-error: true
+
+  # ══════════════════════════════════════════════════════════
+  # SPEC VALIDATION
+  # ══════════════════════════════════════════════════════════
+  spec-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check INDEX.md exists and is valid
+        run: |
+          if [ ! -f docs/features/INDEX.md ]; then
+            echo "::error::docs/features/INDEX.md missing"
+            exit 1
+          fi
+          echo "✅ INDEX.md exists"
+
+      - name: Check for critical TODOs
+        run: |
+          TODOS=$(grep -r "TODO\|FIXME\|HACK\|XXX" docs/features/specs/ --include="*.md" 2>/dev/null | grep -v "Phase-2" | wc -l)
+          if [ "$TODOS" -gt 0 ]; then
+            echo "::warning::Found $TODOS unresolved TODOs/FIXMEs in specs"
+          else
+            echo "✅ No unresolved TODOs in specs"
+          fi
+
+      - name: Check for spec-template conformance
+        run: |
+          if [ -f .opencode/skills/spec-writing/references/feature-spec-template.md ]; then
+            echo "✅ Template exists"
+          else
+            echo "::warning::Template not found at expected path"
+          fi
+
+  # ══════════════════════════════════════════════════════════
+  # VERSION CHECK
+  # ══════════════════════════════════════════════════════════
+  version-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0           # Alle Tags holen
+
+      - name: Check version in pyproject.toml
+        id: current-version
+        run: |
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version found in pyproject.toml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Compare with latest git tag
+        run: |
+          CURRENT_VERSION="${{ steps.current-version.outputs.version }}"
+          LATEST_TAG=$(git tag --sort=-version:refname | head -1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "✅ No previous releases found. Version $CURRENT_VERSION is the first."
+            exit 0
+          fi
+          echo "Latest tag: $LATEST_TAG"
+          # Simple comparison: check if current version sorts higher
+          if [ "$(echo -e "$CURRENT_VERSION\n$LATEST_TAG" | sort -V | tail -1)" = "$CURRENT_VERSION" ]; then
+            echo "✅ $CURRENT_VERSION > $LATEST_TAG"
+          else
+            echo "::error::Version $CURRENT_VERSION is not greater than latest tag $LATEST_TAG"
+            exit 1
+          fi
+
+  # ══════════════════════════════════════════════════════════
+  # E2E TESTS (via Reusable Workflow)
+  # ══════════════════════════════════════════════════════════
+  # Ein kombinierter Workflow, der beide Frontends baut.
+  # Nur auf main (push).
+  #
+  # TEMPORÄR: E2E wird erst wieder ausgeführt, sobald die Frontend-Apps
+  # (apps/parent, apps/kids) eingerichtet sind. Solange die Apps fehlen,
+  # würden die Frontend-Build-Schritte (npm run build --workspace=apps/...)
+  # im e2e-ci.yml fehlschlagen. Sobald die Apps existieren, kann der
+  # Job einfach reaktiviert werden (Kommentar oben entfernen).
+  #
+  # e2e:
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   uses: ./.github/workflows/e2e-ci.yml
+  #   secrets: inherit
+
+  # ══════════════════════════════════════════════════════════
+  # REPORT
+  # ══════════════════════════════════════════════════════════
+  # Aggregiert alle Ergebnisse und schreibt einen
+  # strukturierten RFR-Report als Build-Artifact.
+  report:
+    if: always()                   # Auch bei Fehlern in anderen Jobs ausführen
+    needs: [backend-integration, security, spec-validate, version-check]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate RFR report
+        id: rfr-status
+        run: |
+          COMMIT_SHA="${{ github.sha }}"
+          DATE="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          VERSION="$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/' || echo 'unknown')"
+          REPORT="rfr-report.md"
+
+          # Report-Datei zeilenweise aufbauen (kein Heredoc — sauberere Shell-Evaluation)
+          echo "# RFR Report — Release Readiness" > "$REPORT"
+          echo "" >> "$REPORT"
+          echo "| Feld | Wert |" >> "$REPORT"
+          echo "|------|------|" >> "$REPORT"
+          echo "| Commit | $COMMIT_SHA |" >> "$REPORT"
+          echo "| Branch | ${{ github.ref_name }} |" >> "$REPORT"
+          echo "| Datum | $DATE |" >> "$REPORT"
+          echo "| Version | $VERSION |" >> "$REPORT"
+          echo "| Trigger | ${{ github.event_name }} |" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "## Check-Ergebnisse" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "| Check | Status |" >> "$REPORT"
+          echo "|-------|--------|" >> "$REPORT"
+          echo "| Backend Integration Tests | ${{ needs.backend-integration.result }} |" >> "$REPORT"
+          echo "| Migration Consistency | ${{ needs.backend-integration.result }} |" >> "$REPORT"
+          echo "| Security Audit | ${{ needs.security.result }} |" >> "$REPORT"
+          echo "| Spec Validation | ${{ needs.spec-validate.result }} |" >> "$REPORT"
+          echo "| Version Check | ${{ needs.version-check.result }} |" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "## Gesamtbewertung" >> "$REPORT"
+          echo "" >> "$REPORT"
+
+          # Gesamtstatus berechnen
+          OVERALL="success"
+          for status in "${{ needs.backend-integration.result }}" "${{ needs.security.result }}" "${{ needs.spec-validate.result }}" "${{ needs.version-check.result }}"; do
+            if [ "$status" = "failure" ] || [ "$status" = "cancelled" ]; then
+              OVERALL="failure"
+            fi
+          done
+
+          if [ "$OVERALL" = "failure" ]; then
+            echo "❌ **NICHT RFR** — Ein oder mehrere Checks fehlgeschlagen." >> "$REPORT"
+          else
+            echo "✅ **RFR bestanden** — System ist bereit für einen Release." >> "$REPORT"
+          fi
+
+          echo "" >> "$REPORT"
+          echo "---" >> "$REPORT"
+          echo "_Report generated: $DATE_" >> "$REPORT"
+
+          # Status als Output für GitHub Actions Check
+          echo "status=$OVERALL" >> $GITHUB_OUTPUT
+
+      - name: Upload RFR report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rfr-report-${{ github.sha }}
+          path: rfr-report.md
+          retention-days: 90
+
+      - name: Fail if RFR not passed
+        if: steps.rfr-status.outputs.status == 'failure'
+        run: |
+          echo "::error::RFR nicht bestanden. Siehe rfr-report.md im Build-Artifact."
+          exit 1

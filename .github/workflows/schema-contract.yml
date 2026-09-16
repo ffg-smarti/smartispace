@@ -1,0 +1,246 @@
+name: Schema Contract Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'packages/smarti-api/**'
+      - '.github/workflows/schema-contract.yml'
+      - '.github/workflows/schema-export.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'packages/smarti-api/**'
+      - '.github/workflows/schema-contract.yml'
+  workflow_dispatch:
+
+jobs:
+  # ==========================================================================
+  # JOB 1: Schema generieren (via schema-export.yml) → Artefakt openapi-schema
+  # ==========================================================================
+  # openapi.json wird NICHT committet — es wird generiert. Der Drift-Check
+  # gegen eine committete Datei entfällt daher.
+  schema-generate:
+    uses: ./.github/workflows/schema-export.yml
+
+  # ==========================================================================
+  # JOB 2: Backend Contract Tests (Schemathesis)
+  # ==========================================================================
+  backend-contract-tests:
+    name: Backend Contract Tests (Schemathesis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: schema-generate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Schema Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: backend/
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          uv sync --all-extras
+
+      - name: Run Schemathesis Contract Tests
+        run: |
+          cd backend
+          mkdir -p build/reports
+          CI=true uv run pytest tests/contract/test_openapi_contract.py \
+            -v --tb=short \
+            --junitxml=build/reports/contract-tests.xml
+        env:
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+          CI: "true"
+
+      - name: Upload Contract Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-test-reports
+          path: |
+            backend/build/reports/contract-tests.xml
+            backend/build/reports/contract-tests.md
+          retention-days: 30
+
+  # ==========================================================================
+  # JOB 3: Frontend Package - Orval Generation & TypeCheck
+  # ==========================================================================
+  frontend-schema-sync:
+    name: Frontend Schema Sync (Orval + TypeCheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: schema-generate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Schema Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+          cache-dependency-path: packages/smarti-api/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          npm ci
+
+      - name: Generate Orval Hooks & Schemas
+        run: |
+          cd packages/smarti-api
+          npm run generate
+
+      - name: TypeCheck Generated Code
+        run: |
+          cd packages/smarti-api
+          npm run typecheck
+
+      - name: Verify No Uncommitted Changes in Generated Files
+        run: |
+          cd packages/smarti-api
+          if ! git diff --quiet src/generated/; then
+            echo "::error::Generated files have uncommitted changes!"
+            echo "Run 'npm run generate' locally and commit the changes."
+            git diff src/generated/ | head -50
+            exit 1
+          fi
+          echo "✅ Generated files are up to date"
+
+  # ==========================================================================
+  # JOB 4: Frontend Apps TypeCheck against @smarti/api
+  # ==========================================================================
+  frontend-apps-typecheck:
+    name: Frontend Apps TypeCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: schema-generate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Schema Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Build @smarti/api package
+        run: |
+          cd packages/smarti-api
+          npm run build
+
+      - name: TypeCheck Parent Frontend
+        run: |
+          cd apps/parent
+          npm run typecheck
+
+      - name: TypeCheck Kids Frontend
+        run: |
+          cd apps/kids
+          npm run typecheck
+
+  # ==========================================================================
+  # JOB 5: Breaking Change Detection (Optional - Nightly)
+  # ==========================================================================
+  breaking-change-detection:
+    name: Breaking Change Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: schema-generate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Current Schema
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: .
+
+      - name: Get Baseline Schema (letzter main-Backend-CI)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p baseline
+          gh run download --repo "$GITHUB_REPOSITORY" \
+            --workflow="Backend CI [RFI]" --branch main --name openapi-schema \
+            --dir baseline 2>/dev/null \
+            || echo "{}" > baseline/openapi.json
+          ls -la baseline/ || true
+
+      - name: Check for Breaking Changes
+        run: python3 backend/scripts/check_breaking_changes.py
+
+  # ==========================================================================
+  # JOB 6: Frontend Integration Tests (API Contract)
+  # ==========================================================================
+  frontend-integration-tests:
+    name: Frontend Integration Tests (API Contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: frontend-apps-typecheck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Build @smarti/api package
+        run: |
+          cd packages/smarti-api
+          npm run build
+
+      - name: Run Frontend Integration Tests
+        run: |
+          cd apps/parent
+          npx vitest run tests/integration/ --reporter=verbose
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-integration-results
+          path: apps/parent/node_modules/.cache/vitest/
+          retention-days: 3

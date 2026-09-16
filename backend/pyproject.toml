@@ -1,0 +1,120 @@
+[project]
+name = "copi-lp"
+version = "0.1.0"
+description = "Backend der COPI Lernplattform (Django + Ninja API, Clean Architecture)"
+requires-python = ">=3.12"
+dependencies = [
+    # --- Web framework & API layer ---
+    "django>=5.1,<6.0",                 # [ANGEPASST] erlaubt Upgrades bis Django 6.x
+    "django-ninja>=1.6",                # [ANGEPASST] >=1.3 → 1.6 (neuere Features, Bugfixes)
+    "django-ninja-jwt>=5.3",            # JWT-Auth fuer Ninja (Eltern-/Kind-Login)
+    "django-cors-headers>=4.9.0",       # [ANGEPASST] CORS fuer React-Client & App
+    "python-dotenv>=1.2.3",             # .env-basierte Konfiguration (load_dotenv in settings)
+    "whitenoise>=6.7",                  # Static-File-Serving (Django Admin)
+    "pillow>=11.2.1,<12.0.0",           # Bildverarbeitung (Kurs-/Lektionsbilder)
+
+    # --- Content-Redaktion (Django Admin statt CMS) ---
+    "django-json-widget>=2.0",          # JSON-Editor fuer Interaktions-Block-Payloads im Admin
+
+    # --- Datenbank & Storage ---
+    "psycopg[binary]>=3.2",            # PostgreSQL-Treiber (psycopg3, moderner als psycopg2)
+    "dj-database-url>=0.3.0",          # [NEU] DATABASE_URL aus ENV parsen (flexibler als django-environ allein)
+    "django-storages[s3]>=1.14",       # Medien-Storage-Backend (S3 / Cloudflare R2)
+    "boto3>=1.35",                     # AWS/S3-kompatibler SDK (fuer django-storages)
+
+    # --- Hintergrundjobs (TTS-Generierung, Auto-Grading, Benachrichtigungen) ---
+    "celery>=5.4.0,<6.0.0",           # [ANGEPASST] Upper Bound fuer Stabilitaet
+    "redis>=5.2.0,<6.0.0",            # [ANGEPASST] Celery-Broker & Caching (hoehere Min-Version)
+    "django-celery-beat>=2.7",          # periodische Tasks (z.B. Reminder, Reports)
+    "django-celery-results>=2.5",       # Task-Ergebnisse in der DB nachvollziehen
+    "celery-types>=0.26.0",             # [NEU] Typisierung fuer Celery-Tasks (IDE-Support)
+
+    # --- Formulare & Admin ---
+    "django-widget-tweaks>=1.5.0",      # [NEU] Template-basierte Form-Anpassung (Widget-Klassen im Template)
+    "django-flatpickr>=2.0.3",          # [NEU] Date/Time-Picker fuer Django Admin
+
+    # --- Daten-Import/Export ---
+    "django-import-export>=4.3.8",      # [NEU] CSV/Excel-Import/Export fuer Django Admin
+
+    # --- JSON-Validierung ---
+    "jsonschema>=4.24.0",               # [NEU] JSON-Schema-Validierung (Ergaenzung zu Pydantic)
+
+    # --- Zahlungen ---
+    # "stripe>=11.1",
+
+    # --- Audio / Text-to-Speech ---
+    # "elevenlabs>=1.9",                # TTS fuer Lese-arme Sprachausgabe (Alternative: google-cloud-texttospeech)
+    # "pydub>=0.25",                    # Audio-Nachbearbeitung/Caching (benoetigt ffmpeg als Systempaket)
+
+    # --- Server / Deployment ---
+    "gunicorn>=23.0",
+    "uvicorn[standard]>=0.31",          # ASGI-Worker fuer async Ninja-Endpoints
+
+    # --- Monitoring ---
+    "sentry-sdk>=2.15",
+    "psutil>=6",                         # [NEU] System-Monitoring (Speicher/CPU fuer Healthchecks)
+
+    # --- Content-Validierung ---
+    "pydantic>=2.12.3",
+    "pydantic-core>=2.41.4",           # Schema-Validierung der Lektions-/Uebungsinhalte (Management-Commands)
+    "pydantic-settings>=2.11.0",
+
+    # --- MCP & Auth ---
+    "mcp-django>=0.13.0",               # [NEU] Model Context Protocol Integration fuer Django
+    "bcrypt>=5.0.0",                    # [NEU] Passwort-Hashing (Alternative zu Django's Standard)
+]
+
+[project.optional-dependencies]
+dev = [
+    "django-debug-toolbar>=4.0.0,<5.0.0",   # [ANGEPASST] Performance-Profiler im Admin
+    "django-extensions>=4.1.0,<5.0.0",      # [ANGEPASST] u.a. shell_plus, graph_models
+    "ipython>=8.27",
+    "ruff>=0.11.8,<0.12.0",                 # [ANGEPASST] Linting + Formatting (ersetzt flake8/isort/black)
+    "pyrefly>=1.1.1",                        # [ANGEPASST] Primary Type-Checker (schnell, eingebaut Django/Pydantic)
+    "pyright>=1.1.400,<2.0.0",              # IDE Type-Checker (Pylance/VS Code)
+    "typing-extensions>=4.15.0",             # [NEU] Backports für neuere Typing-Features
+    "mcp[cli]>=1.0.0",                      # [NEU] MCP CLI-Tools (Server-Entwicklung, Testing)
+    "pre-commit>=3.8",
+    "watchfiles>=0.24",                      # Auto-Reload fuer uvicorn --reload
+]
+test = [
+    "pytest>=8.3.5,<9.0.0",                 # [ANGEPASST] Test-Runner
+    "pytest-django>=4.11.1,<5.0.0",         # [ANGEPASST] Django-Integration fuer pytest
+    "pytest-cov>=6.2.1,<7.0.0",             # [ANGEPASST] Coverage-Messung
+    "pytest-html>=4.1.1,<5.0.0",            # [ANGEPASST] HTML-Test-Reports fuer CI/CD
+    "factory-boy>=3.3",                      # Testdaten-Factories (Kurse, Nutzer, Fortschritt)
+    "Faker>=30.0",
+    "freezegun>=1.5",                        # Zeit mocken (Streaks, Ablaufdaten)
+    "responses>=0.25",                       # HTTP-Mocking (Stripe, TTS-APIs)
+    "pytest-xdist>=3.8.0,<4.0.0",           # [ANGEPASST] Tests parallel ausfuehren (schnellere CI-Laufzeit)
+    "schemathesis>=4.10.2",                  # [NEU] API-Contract-Tests (automatische Endpoint-Validierung)
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Pakete laut workspace.md: Django-Projekt + Apps unter src/dweb/, DDD-Layer unter src/smarti/
+packages = ["src/dweb", "src/smarti"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.pyrefly]
+python_version = "3.12"
+django_settings_module = "dsmarti.settings"
+project_excludes = [
+    "**/migrations/**",
+    "**/tests/**",
+    "**/__pycache__/**",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "dsmarti.settings"
+python_files = ["test_*.py", "*_test.py"]
+addopts = "--cov=. --cov-report=term-missing"

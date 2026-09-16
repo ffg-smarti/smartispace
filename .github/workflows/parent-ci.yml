@@ -1,0 +1,64 @@
+name: Frontend CI - Parent [RFI]
+
+on:
+  # Nach Backend-CI: exakt das Schema des passenden Commits nutzen (same-commit)
+  workflow_run:
+    workflows: ['Backend CI [RFI]']
+    types: [completed]
+  # Bei reinen Frontend-Änderungen: aktuelles Schema-Artefakt laden
+  push:
+    paths:
+      - 'apps/parent/**'
+      - 'packages/**'
+      - '.github/workflows/parent-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/parent/**'
+      - 'packages/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Bei workflow_run: den exakten Commit des triggering Runs auschecken
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install all workspaces
+        run: npm ci
+
+      # openapi.json wird NICHT committet (generiert). Artefakt von backend-ci laden.
+      - name: Download OpenAPI schema
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+          run-id: ${{ github.event.workflow_run.id || '' }}
+        continue-on-error: true
+
+      - name: Generate API types
+        run: npm run generate --workspace=packages/smarti-api
+        continue-on-error: true
+
+      - name: Type-check
+        run: npm run typecheck
+        working-directory: apps/parent
+
+      - name: Lint
+        run: npm run lint
+        working-directory: apps/parent
+
+      - name: Test
+        run: npm run test:run
+        working-directory: apps/parent
+
+      - name: Build
+        run: npm run build
+        working-directory: apps/parent

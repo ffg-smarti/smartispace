@@ -1,0 +1,92 @@
+# ============================================================
+# Build Images — Container bauen + zu ghcr pushen
+# ============================================================
+# Reusable Workflow (workflow_call) für das Bauen der Container
+# (Backend, apps/parent, apps/kids) und Push zu GitHub Container Registry.
+# Wird von delivery.yml (Test-Builds) und deploy.yml (Release-Builds) genutzt.
+#
+# Inputs:
+#   tag      — Image-Tag (z. B. v0.1.0, latest, test)
+#   api_url  — Backend-Basis-URL (Build-Zeit, VITE_API_URL) für Frontends
+# ============================================================
+
+name: Build Images
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: 'Image-Tag (z. B. v0.1.0, latest, test)'
+      api_url:
+        required: false
+        type: string
+        default: 'https://api.fit-fuer-gymnasium.de'
+        description: 'Backend-Basis-URL für Frontends (VITE_API_URL)'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - id: backend
+            dockerfile: backend/Dockerfile
+            app: false
+          - id: parent
+            dockerfile: apps/parent/Dockerfile
+            app: true
+          - id: kids
+            dockerfile: apps/kids/Dockerfile
+            app: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # openapi.json wird nicht committet (generiert). Für Frontend-Builds das
+      # Artefakt des Schema-Exports in den Build-Kontext holen.
+      - name: Download OpenAPI schema (frontend builds)
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+        continue-on-error: true
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ matrix.service.app }}" = "true" ]; then
+            DIR=$(dirname ${{ matrix.service.dockerfile }})
+            VERSION=$(grep '"version"' "$DIR/package.json" | sed 's/.*"version": "\(.*\)".*/\1/')
+          else
+            VERSION=$(grep '^version = ' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service.id }} image
+        uses: docker/build-push-action@v5
+        with:
+          # Build-Kontext = Repository-Root (packages/ + pyproject.toml erreichbar)
+          context: .
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          build-args: ${{ matrix.service.app && format('VITE_API_URL={0}', inputs.api_url) || '' }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/smarti-${{ matrix.service.id }}:${{ inputs.tag }}
+            ${{ env.IMAGE_PREFIX }}/smarti-${{ matrix.service.id }}:${{ github.sha }}

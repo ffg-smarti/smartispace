@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "mypy",
+            "type": "shell",
+            "command": "/home/user/lms/smarti/.venv/bin/mypy",
+            "args": ["src/", "--config-file=mypy.ini"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": {
+                    "PATH": "/home/user/lms/smarti/.venv/bin:${env:PATH}"
+                }
+            },
+            "problemMatcher": "$mypy",
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        }
+    ]
+}

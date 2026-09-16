@@ -1,0 +1,139 @@
+name: E2E Tests
+
+on:
+  workflow_call:
+  push:
+    paths:
+      - 'apps/parent/**'
+      - 'apps/kids/**'
+      - 'packages/**'
+      - 'backend/src/**'
+      - 'backend/tests/e2e/**'
+      - '.github/workflows/e2e-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/parent/**'
+      - 'apps/kids/**'
+      - 'packages/**'
+      - 'backend/src/**'
+      - 'backend/tests/e2e/**'
+  workflow_dispatch: {}
+
+env:
+  CI: "true"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smarti_test
+          POSTGRES_USER: smarti
+          POSTGRES_PASSWORD: smarti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smarti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 1. Python-Abhängigkeiten ──
+      - name: Install Python deps
+        run: uv sync --frozen --dev
+
+      # ── 2. Frontends bauen ──
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Download OpenAPI schema
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+        continue-on-error: true
+
+      - name: Generate API types
+        run: npm run generate --workspace=@smarti/api
+        continue-on-error: true
+
+      - name: Build parent frontend
+        run: npm run build --workspace=apps/parent
+
+      - name: Build kids frontend
+        run: npm run build --workspace=apps/kids
+
+      # ── 3. Playwright-Browser ──
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: uv run playwright install chromium
+        working-directory: backend
+
+      # ── 4. Server starten ──
+      - name: Start Django server
+        run: |
+          uv run python src/dweb/manage.py migrate
+          uv run python src/dweb/manage.py runserver 0.0.0.0:8000 &
+          for i in $(seq 1 15); do
+            curl -s http://localhost:8000/ > /dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "Django ready"
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+        working-directory: backend
+
+      - name: Start frontend servers
+        run: |
+          npx serve -s apps/parent/dist -l 8080 &
+          npx serve -s apps/kids/dist -l 8081 &
+          for i in $(seq 1 10); do
+            curl -s http://localhost:8080/ > /dev/null 2>&1 && break
+            sleep 2
+          done
+          echo "Parent frontend ready (port 8080)"
+          curl -s http://localhost:8081/ > /dev/null 2>&1 && echo "Kids frontend ready (port 8081)" || echo "Kids frontend not ready (port 8081)"
+
+      # ── 5. E2E-Tests ausführen ──
+      - name: Run E2E tests
+        run: |
+          if find tests/e2e -name '*.py' ! -name '__init__.py' 2>/dev/null | grep -q .; then
+            uv run pytest tests/e2e/ \
+              -m playwright -x --tb=long \
+              --html=../build/test/e2e-report.html \
+              --self-contained-html \
+              --base-url=http://localhost:8080
+          else
+            echo "⚠️ Keine E2E-Tests vorhanden — überspringe"
+          fi
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          DJANGO_SETTINGS_MODULE: dsmarti.settings
+          E2E_PARENT_USERNAME: ${{ secrets.E2E_PARENT_USERNAME }}
+          E2E_PARENT_PASSWORD: ${{ secrets.E2E_PARENT_PASSWORD }}
+        working-directory: backend
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report-${{ github.sha }}
+          path: build/test/e2e-report.html

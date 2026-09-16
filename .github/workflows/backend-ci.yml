@@ -1,0 +1,22 @@
+name: Backend CI [RFI]
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+      - '.github/workflows/rfi.yml'
+      - '.github/workflows/schema-export.yml'
+  pull_request:
+    paths: ['backend/**']
+
+jobs:
+  # RFI-Gate (Package-Ebene: ruff, pyrefly, pytest) — wiederverwendbar
+  rfi:
+    uses: ./.github/workflows/rfi.yml
+    secrets: inherit
+
+  # OpenAPI-Schema exportieren + als Artefakt hochladen — wiederverwendbar
+  schema:
+    needs: rfi
+    uses: ./.github/workflows/schema-export.yml

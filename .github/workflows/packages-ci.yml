@@ -1,0 +1,50 @@
+name: Packages CI [RFI]
+
+on:
+  # Nach erfolgreichem Backend-CI: Packages mit aktuellem Schema testen
+  workflow_run:
+    workflows: ['Backend CI [RFI]']
+    types: [completed]
+  # Direkte Änderungen an Packages (PRs, Push)
+  push:
+    paths: ['packages/**', '.github/workflows/packages-ci.yml']
+  pull_request:
+    paths: ['packages/**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Bei workflow_run: den exakten Commit des triggering Runs auschecken
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install all workspaces
+        run: npm ci
+
+      - name: Download OpenAPI schema from Backend CI
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema
+          path: packages/smarti-api/
+          run-id: ${{ github.event.workflow_run.id || '' }}
+        continue-on-error: true
+
+      - name: Generate API types
+        run: npm run generate --workspace=packages/smarti-api
+
+      - name: Type-check all packages
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Build all packages
+        run: npm run build --workspaces --if-present
+
+      - name: Test all packages
+        run: npm run test:run --workspaces --if-present

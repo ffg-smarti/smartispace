@@ -5,10 +5,13 @@ __pycache__/
 
 # C extensions
 *.so
+*.sqlite3
+*.log
 
 # Distribution / packaging
 .Python
 build/
+uploads/
 develop-eggs/
 dist/
 downloads/
@@ -57,6 +60,7 @@ cover/
 
 # Django stuff:
 *.log
+*.log.*
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -216,3 +220,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node.js / JavaScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Nested lockfiles (npm workspaces nutzt nur Root)
+apps/*/package-lock.json
+
+# Environment overrides
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Secrets (individuell, nie committed)
+backend/.env.secret
+secrets.env
+
+x-user/

@@ -1,0 +1,115 @@
+# ============================================================
+# Delivery — Ready-for-Release Build + Tagging (auf main)
+# ============================================================
+# Orchestriert den Release-Weg auf main:
+#   1. rfi-gate   → RFI (ruff, pyrefly, pytest)
+#   2. rfr        → RFR (Integration, Security, Spec, Version, Migration)
+#   3. build-test → Container für Testzwecke bauen (ghcr :test)
+#   4. release    → optional Git-Tag v{version} auf main + GitHub Release
+#
+# Der Tag entsteht NUR, wenn rfi-gate + rfr grün sind.
+# Anschließend merged der Mensch den Tag manuell auf release → deploy.yml.
+# ============================================================
+
+name: Delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_tag:
+        description: 'Git-Tag v{version} auf main erzeugen + GitHub Release'
+        required: false
+        default: false
+        type: boolean
+      release_version:
+        description: 'Version (Default: aus backend/pyproject.toml)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  API_URL: https://api.fit-fuer-gymnasium.de
+
+jobs:
+  # ══════════════════════════════════════════════════════════
+  # RFI-GATE — Package-Ebene
+  # ══════════════════════════════════════════════════════════
+  rfi-gate:
+    uses: ./.github/workflows/rfi.yml
+    secrets: inherit
+
+  # ══════════════════════════════════════════════════════════
+  # RFR-GATE — System-Ebene
+  # ══════════════════════════════════════════════════════════
+  rfr-gate:
+    needs: rfi-gate
+    uses: ./.github/workflows/rfr.yml
+    secrets: inherit
+
+  # ══════════════════════════════════════════════════════════
+  # SCHEMA-EXPORT — für Frontend-Builds (openapi.json)
+  # ══════════════════════════════════════════════════════════
+  schema-export:
+    needs: [rfi-gate, rfr-gate]
+    uses: ./.github/workflows/schema-export.yml
+
+  # ══════════════════════════════════════════════════════════
+  # BUILD-TEST — Container für Testzwecke bauen
+  # ══════════════════════════════════════════════════════════
+  build-test:
+    needs: [rfi-gate, rfr-gate, schema-export]
+    uses: ./.github/workflows/build-images.yml
+    with:
+      tag: test
+    secrets: inherit
+
+  # ══════════════════════════════════════════════════════════
+  # RELEASE — Tag auf main + GitHub Release (optional)
+  # ══════════════════════════════════════════════════════════
+  # Abhängig nur von den Gates (RFI + RFR). Der Test-Build (build-test) ist
+  # ein separater Schritt und wird nicht als Voraussetzung benötigt — so wird
+  # ein Zyklus in der Job-Abhängigkeitskette vermieden.
+  release:
+    if: ${{ github.event.inputs.create_tag == 'true' }}
+    needs: [rfi-gate, rfr-gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.release_version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(grep '^version = ' backend/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release-Version: $VERSION"
+
+      - name: Create and push release tag on main
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG existiert bereits — überspringe"
+            exit 0
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "✅ Release-Tag $TAG auf main erstellt und gepusht"
+
+      - name: Create GitHub Release (Doku)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes "Automatischer Release-Tag nach grünem RFI- + RFR-Gate auf main." \
+            --generate-notes \
+            || echo "::warning::Release konnte nicht erstellt werden (existiert evtl. bereits)"

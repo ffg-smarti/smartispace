@@ -1,0 +1,60 @@
+# ============================================================
+# RFI Backend — Ready For Integration (Package-Ebene)
+# ============================================================
+# Wiederverwendbarer Workflow (workflow_call), der die
+# Package-Ebene-Checks des Backends bündelt:
+#   - Lint (ruff)
+#   - Typecheck (pyrefly)
+#   - Unit-/Integrationstests (pytest, ohne slow/playwright/contract)
+#
+# Wird als GATE vor Builds/Releases genutzt (deploy.yml: rfi-gate)
+# und von backend-ci.yml auf Push/PR eingebunden.
+# Der OpenAPI-Export ist bewusst NICHT hier — er lebt in schema-export.yml.
+#
+# Kein eigener Trigger: wird nur per `uses:` aufgerufen.
+# ============================================================
+
+name: RFI Backend
+
+on:
+  workflow_call:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: smarti_test
+          POSTGRES_USER: smarti
+          POSTGRES_PASSWORD: smarti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smarti"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+
+      - name: Lint
+        run: uv run ruff check src/
+
+      - name: Run pyrefly
+        run: uv run pyrefly check --summarize-errors --min-severity error
+
+      - name: Test
+        run: uv run pytest -m "not slow and not playwright" --ignore=tests/contract
+        env:
+          DATABASE_URL: postgresql://smarti:smarti@localhost:5432/smarti_test
+          DJANGO_SETTINGS_MODULE: dsmarti.settings

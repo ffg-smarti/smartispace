@@ -1,0 +1,170 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap");
+
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: 'Source Sans Pro', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-serif: 'Source Serif Pro', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+}
+
+:root {
+  --background: 35 30% 88%;
+  --foreground: 24 9% 10%;
+  --card: 60 9% 97%;
+  --card-foreground: 24 9% 10%;
+  --popover: 20 5% 90%;
+  --popover-foreground: 24 9% 10%;
+  --primary: 37 92% 50%;
+  --primary-foreground: 47 100% 96%;
+  --secondary: 24 5% 44%;
+  --secondary-foreground: 60 9% 97%;
+  --muted: 23 5% 82%;
+  --muted-foreground: 24 9% 10%;
+  --accent: 47 100% 96%;
+  --accent-foreground: 37 92% 50%;
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 0 85% 97%;
+  --success: 152 60% 40%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 55%;
+  --warning-foreground: 220 20% 12%;
+  --border: 23 5% 82%;
+  --input: 23 5% 82%;
+  --ring: 37 92% 50%;
+  --radius: 1rem;
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 24 9% 10%;
+  --sidebar-primary: 37 92% 50%;
+  --sidebar-primary-foreground: 47 100% 96%;
+  --sidebar-accent: 24 5% 44%;
+  --sidebar-accent-foreground: 60 9% 97%;
+  --sidebar-border: 23 5% 82%;
+  --sidebar-ring: 37 92% 50%;
+  --chart-1: 45 96% 64%;
+  --chart-2: 47 95% 53%;
+  --chart-3: 43 96% 56%;
+  --chart-4: 37 92% 50%;
+  --chart-5: 24 5% 44%;
+  --sidebar: 60 9% 97%;
+  --font-sans: 'Source Sans Pro', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-serif: 'Source Serif Pro', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: 24 9% 10%;
+  --foreground: 60 9% 97%;
+  --card: 12 6% 15%;
+  --card-foreground: 60 9% 97%;
+  --popover: 30 6% 25%;
+  --popover-foreground: 60 9% 97%;
+  --primary: 43 96% 56%;
+  --primary-foreground: 20 91% 14%;
+  --secondary: 24 5% 44%;
+  --secondary-foreground: 60 9% 97%;
+  --muted: 24 5% 44%;
+  --muted-foreground: 60 9% 97%;
+  --accent: 25 83% 14%;
+  --accent-foreground: 47 95% 53%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 85% 97%;
+  --border: 33 5% 32%;
+  --input: 33 5% 32%;
+  --ring: 43 96% 56%;
+  --chart-1: 45 96% 64%;
+  --chart-2: 48 96% 76%;
+  --chart-3: 43 96% 56%;
+  --chart-4: 37 92% 50%;
+  --chart-5: 33 5% 32%;
+  --sidebar: 12 6% 15%;
+  --sidebar-foreground: 60 9% 97%;
+  --sidebar-primary: 43 96% 56%;
+  --sidebar-primary-foreground: 20 91% 14%;
+  --sidebar-accent: 47 95% 53%;
+  --sidebar-accent-foreground: 25 83% 14%;
+  --sidebar-border: 33 5% 32%;
+  --sidebar-ring: 43 96% 56%;
+  --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.theme-kinder {
+  --background: 140 30% 88%;
+  --primary: 152 55% 45%;
+  --primary-foreground: 150 40% 97%;
+  --ring: 152 55% 45%;
+  --accent: 145 40% 95%;
+  --accent-foreground: 152 55% 45%;
+}
